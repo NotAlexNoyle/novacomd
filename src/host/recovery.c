@@ -42,7 +42,7 @@ typedef struct recovery_entry_s {
 } recovery_entry_t;
 
 /* list of recovery tokens */
-TAILQ_HEAD(recovery_queue_s, recovery_entry_s)  t_recovery_queue;
+static TAILQ_HEAD(recovery_queue_s, recovery_entry_s)  t_recovery_queue;
 static platform_mutex_t recovery_lock;
 
 

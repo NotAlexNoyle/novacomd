@@ -255,6 +255,10 @@ void *packet_thread(void *arg)
 				break;
 			case PACKET_HEADER_TYPE_ERR:
 				TRACEF("unexpected incoming stderr data");
+				rc = bufq_consume_sleep(args->in_queue, h.size);
+				if ((size_t)rc < h.size) 
+					goto conn_fail;
+				break;
 			default:
 				rc = bufq_consume_sleep(args->in_queue, h.size);
 				if ((size_t)rc < h.size) 
