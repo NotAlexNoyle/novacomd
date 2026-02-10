@@ -12,6 +12,10 @@ To build:
 
 > ./install-novacomd-linux.sh
 
+_On machines with GCC 15 or later, the following command should be run instead:_
+
+> CC="gcc -std=gnu17" ./install-novacomd-linux.sh
+
 To install:
 
 *May not require privilege escalation depending on your install location.*
