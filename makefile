@@ -39,7 +39,7 @@ CFLAGS :=
 ifneq ($(MACHINE),)
 MYCFLAGS += -DMACHINE=\"$(MACHINE)\"
 endif
-HOSTCFLAGS := $(MYCFLAGS) $(CFLAGS) -Isrc
+HOSTCFLAGS := $(MYCFLAGS) $(CFLAGS) -Isrc  -DPLATFORM_PTHREADS=1
 DEVICECFLAGS := $(MYCFLAGS) $(OECFLAGS) $(TARGET_CC_ARCH) -DPLATFORM_PTHREADS=1
 CPPFLAGS := -g
 ASMFLAGS :=
@@ -62,7 +62,7 @@ DEVICELD := arm-none-linux-gnueabi-ld
 endif
 
 
-ifeq ($(UNAME),Linux)
+ifeq ($(UNAME), $(filter $(UNAME), Linux Darwin))
 LDFLAGS += -Wl,-rpath,. # add the local path to the program's search path
 HOSTLDLIBS += -lpthread -lusb
 HOSTPLATFORM := pthreads

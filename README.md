@@ -1,31 +1,47 @@
 novacomd
 ========
 
-A 2025 build of novacomd adapted for UNIX-like hosts using libusb-compat-0.1.
+A 2026 build of novacomd for UNIX-like hosts built on top of libusb-compat-0.1. novacomd runs as a daemon or service on the host and the device.
 
-Before building:
+## Dependencies
 
-*This command will vary depending on your distribution.*
-> doas xbps-install -Su libusb-compat-devel
+Building from source needs a C compiler (GCC or Clang), **GNU make**, and **libusb-compat-0.1**.
 
-To build:
+Get a compiler:
+
+* **macOS:** Apple's Clang and make come with the Xcode Command Line Tools (`xcode-select --install`).
+* **Linux:** install your distribution's build tools (`build-essential` on Debian/Ubuntu, `base-devel` on Arch, etc.).
+
+Get libusb-compat-0.1:
+
+| Platform | Command |
+| --- | --- |
+| macOS (Homebrew) | `brew install libusb-compat` |
+| Debian / Ubuntu | `sudo apt install libusb-dev` |
+| Fedora | `sudo dnf install libusb-compat-0.1-devel` |
+| Arch | `sudo pacman -S libusb-compat` |
+| Void | `doas xbps-install -Su libusb-compat-devel` |
+
+(On Debian/Ubuntu the libusb-0.1 development package is named `libusb-dev`; `libusb-1.0-0-dev` is a legacy, unused package.)
+
+## Building
 
 > ./install-novacomd-linux.sh
 
-_On machines with GCC 15 or later, the following command should be run instead:_
+To force a specific compiler, set `CC`, for example:
 
 > CC="gcc -std=gnu17" ./install-novacomd-linux.sh
 
-To install:
+To install, copy or symlink `build-novacomd-host/novacomd` to the `/bin` directory of your Palm SDK install (usually `/opt/nova/bin`).
 
 *May not require privilege escalation depending on your install location.*
-> doas mv build-novacomd-host/* /YOUR/LOCATION/HERE/
-
-novacomd runs as a daemon or service on the host and the device.
+> mv build-novacomd-host/novacomd /YOUR/LOCATION/HERE/
 
 ![In Action](https://i.imgur.com/GUqOYEp.png)
 
-# Copyright and License Information
+Thanks to [incidentist](https://github.com/incidentist/novacomd) for the macOS build support.
+
+## Copyright
 
 Unless otherwise specified, all content, including all source code files 
 and documentation files in this repository are:

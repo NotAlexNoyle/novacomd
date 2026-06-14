@@ -33,7 +33,6 @@
 #include <log.h>
 #include <sys/queue.h>
 
-#include <linux/usbdevice_fs.h>
 #include "../novacom/mux.h"
 #include "device_list.h"
 

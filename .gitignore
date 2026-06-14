@@ -1,1 +1,8 @@
-build-novacomd-host/
+build-*
+*.swp
+*~
+tags
+TAGS
+*.orig
+cscope.*
+*.dSYM
