@@ -26,16 +26,29 @@ Get libusb-compat-0.1:
 
 ## Building
 
-> ./install-novacomd-linux.sh
+Run the build script from the source directory. It picks a compiler and adds `-std=gnu17` when supported:
 
-To force a specific compiler, set `CC`, for example:
+> ./install-novacomd.sh
 
-> CC="gcc -std=gnu17" ./install-novacomd-linux.sh
+To force a specific compiler, set `CC`:
 
-To install, copy or symlink `build-novacomd-host/novacomd` to the `/bin` directory of your Palm SDK install (usually `/opt/nova/bin`).
+> CC="gcc -std=gnu17" ./install-novacomd.sh
 
-*May not require privilege escalation depending on your install location.*
-> mv build-novacomd-host/novacomd /YOUR/LOCATION/HERE/
+The built daemon lands at `build-novacomd-host/novacomd`.
+
+## Installing
+
+**Linux** — re-run the script with privilege escalation. It still builds as your normal user, then installs to `/usr/local/bin` (override with `INSTALL_DIR`):
+
+> sudo ./install-novacomd.sh
+
+`doas ./install-novacomd.sh` works too.
+
+**macOS** — build *without* privilege escalation (running the script as root is refused), then copy the binary into your Palm SDK `bin`, usually `/opt/nova/bin`:
+
+> ./install-novacomd.sh
+>
+> sudo cp build-novacomd-host/novacomd /opt/nova/bin/novacomd
 
 ![In Action](https://i.imgur.com/GUqOYEp.png)
 

@@ -43,7 +43,7 @@ if (( EUID == 0 )); then
     if [ -n "$orig_user" ] && [[ "$builder_uid" =~ ^[1-9][0-9]*$ ]] && command -v runuser >/dev/null 2>&1; then
         builder_prefix=(runuser -u "$orig_user" --)
     else
-        die "refusing to build as root -- run as a normal user; elevation is only used to install."
+        die "refusing to build as root -- run as a normal user; privilege escalation is only used to install."
     fi
 fi
 as_builder() { "${builder_prefix[@]}" "$@"; }
@@ -96,7 +96,7 @@ if (( EUID == 0 )); then
     [ -f "$dest" ] && [ -x "$dest" ] || die "post-install check failed: $dest"
     log "installed: $dest"
 else
-    # Not root: print the manual install command using whichever elevation tool is available.
+    # Not root: print the manual install command using the available privilege escalation tool.
     if command -v doas >/dev/null 2>&1; then elevate="doas"; else elevate="sudo"; fi
     log "not running as root -- skipping install."
     log "to install:  $elevate install -T -m 0755 '$src_dir/$BUILD_BIN' '$INSTALL_DIR/$TARGET'"
