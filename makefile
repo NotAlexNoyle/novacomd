@@ -63,7 +63,14 @@ endif
 
 
 ifeq ($(UNAME), $(filter $(UNAME), Linux Darwin))
-LDFLAGS += -Wl,-rpath,. # add the local path to the program's search path
+HOSTLDFLAGS += -Wl,-rpath,. # add the local path to the program's search path
+# FIXME: add homebrew properly
+HOSTLDFLAGS += -L/opt/homebrew/Cellar/libusb/1.0.30/lib/
+HOSTCFLAGS += -I/opt/homebrew/Cellar/libusb/1.0.30/include/
+# add pkgsrc
+HOSTLDFLAGS += -L/opt/pkg/lib
+HOSTCFLAGS += -I/opt/pkg/include
+HOSTCXXFLAGS += -I/opt/pkg/include
 HOSTLDLIBS += -lpthread -lusb
 HOSTPLATFORM := pthreads
 HOSTOS := linux
@@ -125,7 +132,7 @@ host: $(BUILDDIR)-host/$(TARGET)
 
 $(BUILDDIR)-host/$(TARGET): $(HOSTOBJS)
 	@echo HOST linking $@
-	@${ENVP} $(CC) $(LDFLAGS) $(HOSTOBJS) -o $@ $(HOSTLDLIBS)
+	@${ENVP} $(CC) $(LDFLAGS) $(HOSTOBJS) -o $@ $(HOSTLDLIBS) $(HOSTLDFLAGS)
 
 $(BUILDDIR)-device/$(TARGET): $(DEVICEOBJS)
 	@echo DEV linking $@
