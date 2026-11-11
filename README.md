@@ -37,7 +37,7 @@ Apple Silicon).
 | `novacomd-<version>-macos-x86_64` | Intel Macs, macOS 10.13 or later |
 | `novacomd-<version>-macos-arm64` | Apple Silicon Macs, macOS 11 or later |
 
-libusb is built in, so a binary needs nothing beyond the operating system. Install one where your Palm SDK looks for
+libusb-compat and libusb 1.0 are built in, so a binary needs nothing beyond the operating system. Install one where your Palm SDK looks for
 it, usually `/opt/nova/bin`:
 
 > sudo install -m 0755 novacomd-&lt;version&gt;-linux-x86_64 /opt/nova/bin/novacomd
@@ -47,7 +47,8 @@ The macOS binaries are not notarized: if macOS refuses to start one you download
 
 ## Building from source
 
-You need a C compiler (GCC or Clang), **GNU make**, and the **libusb-0.1 API** (`<usb.h>`, `-lusb`).
+You need a C compiler (GCC or Clang), **GNU make**, and **libusb-compat**: the libusb-0.1 API (`<usb.h>`, `-lusb`)
+implemented on libusb 1.0.
 
 Build tools:
 
@@ -55,21 +56,24 @@ Build tools:
 * **Linux:** `build-essential` on Debian, Ubuntu and Raspberry Pi OS, `gcc` and `make` on Fedora, `base-devel` on Arch
   and Void.
 
-The libusb-0.1 API:
+libusb-compat:
 
 | Platform | Command | Provides |
 | --- | --- | --- |
 | macOS (Homebrew) | `brew install libusb-compat` | libusb-compat 0.1.9 |
-| Debian / Ubuntu / Raspberry Pi OS | `sudo apt install libusb-dev` | libusb 0.1.12 |
+| Debian / Ubuntu / Raspberry Pi OS | `sudo apt install libusb-1.0-0-dev pkg-config bzip2 curl` | libusb 1.0; the install script builds libusb-compat 0.1.9 from its release tarball |
 | Fedora | `sudo dnf install libusb-compat-0.1-devel` | libusb-compat 0.1.9 |
 | Arch | `sudo pacman -S libusb-compat` | libusb-compat 0.1.9 |
 | Void | `doas xbps-install -S libusb-compat-devel` | libusb-compat 0.1.8 |
 
-libusb-compat and the original libusb 0.1.12 provide the same API, and novacomd builds against either. (`libusb-1.0-0-dev`
-is libusb 1.0, a different API that novacomd does not use.)
+Debian, Ubuntu and Raspberry Pi OS package only the original libusb 0.1.12 (`libusb-dev`), which novacomd must not use:
+after a USB timeout, its wait for the cancelled transfer can block for good, and novacomd stops answering until it is
+restarted. The install script never links it. Where it is all the system has, the script fetches libusb-compat
+(checked against a pinned SHA-256), builds it in `build-libusb-compat/`, and links it in; libusb-compat then uses the
+system's libusb 1.0.
 
-Build from the source directory with the script. It uses `gcc` (or `cc`; set `CC` to choose, e.g. `CC=clang`) at the
-compiler's default C standard:
+Build from the source directory with the script, not with a bare `make host`, which links whatever `-lusb` the system
+has. It uses `gcc` (or `cc`; set `CC` to choose, e.g. `CC=clang`) at the compiler's default C standard:
 
 > ./install-novacomd.sh
 
@@ -91,6 +95,13 @@ Palm SDK's `bin`, usually `/opt/nova/bin`:
 > ./install-novacomd.sh
 >
 > sudo cp build-novacomd-host/novacomd /opt/nova/bin/novacomd
+
+## Building the release binaries
+
+* **Linux:** `./linux-release.sh <tag>` (needs podman or docker) builds the three Linux binaries of a tag in Ubuntu
+  18.04, with libusb 1.0 and libusb-compat built from their release tarballs as static libraries, and checks and
+  starts each (the ARM ones under qemu). They land in `release-<tag>/`, each with its `.sha256`.
+* **macOS:** `.github/workflows/macos-release.yml`, on GitHub's macOS runners, the same way for Intel and Apple Silicon.
 
 ![In Action](https://i.imgur.com/GUqOYEp.png)
 

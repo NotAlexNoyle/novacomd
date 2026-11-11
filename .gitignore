@@ -6,3 +6,4 @@ TAGS
 *.orig
 cscope.*
 *.dSYM
+release-*
