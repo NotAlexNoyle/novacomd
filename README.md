@@ -1,68 +1,92 @@
 novacomd
 ========
 
-A 2026 build of novacomd for UNIX-like hosts built on top of libusb-compat-0.1. novacomd runs as a daemon or service on the host and the device.
+novacomd is the daemon that connects the webOS SDK tools (`novacom`, `novaterm`, the palm-* tools) to webOS devices.
+This fork runs on UNIX-like hosts and is built on the libusb-0.1 API.
 
-Supported hosts: **Linux** on any architecture, **Raspberry Pi** included (Raspberry Pi OS, armhf or arm64), and **macOS**
-(Intel and Apple Silicon).
+**Hosts:** Linux on any architecture, Raspberry Pi included (Raspberry Pi OS, armhf or arm64), and macOS (Intel and
+Apple Silicon).
 
-Supported devices: HP/Palm webOS devices (webOS 1-3 and webOS CE), **LuneOS**, and **Lunacy** on Android. See
-[Devices](#devices).
+> **Windows is not supported**, and will not be. If you need novacomd on Windows, use the
+> [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) fork by webOSArchive, which ships a Windows build
+> and installer.
 
-> **Windows is not supported.** This fork builds and runs on Linux and macOS only, and Windows support will not be
-> added. If you need novacomd on Windows, use the [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux)
-> fork by webOSArchive, which ships a Windows build and installer.
+## Devices
 
-## Dependencies
+* **HP/Palm webOS devices** (Pre, Pixi, Veer, TouchPad and the rest of HP's line), on webOS 1-3 and webOS CE, over USB.
+* **LuneOS** (webOS-ports). A LuneOS device that presents Palm's USB IDs, such as a TouchPad, is listed under its usual
+  type. One that adds novacom to its own USB gadget under another vendor's IDs is found by the novacom interface itself
+  (vendor class, subclass 0x47, protocol 0x11) and listed as `unknown-linux`.
+* **Lunacy** (webOSArchive's legacy webOS apps on Android). novacomd asks the adb server you run (`127.0.0.1:5037`, or
+  `ADB_SERVER_SOCKET` / `ANDROID_ADB_SERVER_PORT`) for its devices every few seconds and lists each one whose Lunacy
+  answers as `adb lunacy`, beside the USB devices; `novacom` and `novaterm` reach it like any other webOS device, and the
+  palm-* tools from webos-sdk-redux 0.4 on recognise it. novacomd never starts an adb server. `-A` (`--no-adb`) turns the
+  search off, for instance when you use adb for other phones and no Lunacy.
+* **Over TCP**: a device or emulator that serves novacom over TCP is reached with `-c <host>:<port>`.
 
-Building from source needs a C compiler (GCC or Clang), **GNU make**, and the **libusb-0.1 API** (`<usb.h>`, `-lusb`): libusb-compat-0.1, or the original libusb 0.1.12 where a distribution still ships that.
+## Release binaries
 
-Get a compiler:
+[Releases](https://git.trueog.net/NotAlexNoyle/novacomd/releases) from 1.2.1 on carry ready-built binaries, each with a
+`.sha256`:
 
-* **macOS:** Apple's Clang and make come with the Xcode Command Line Tools (`xcode-select --install`).
-* **Linux:** install your distribution's build tools (`build-essential` on Debian/Ubuntu and Raspberry Pi OS, `gcc` and `make` on Fedora, `base-devel` on Arch, `base-devel` on Void).
+| File | Runs on |
+| --- | --- |
+| `novacomd-<version>-linux-x86_64` | 64-bit PC Linux with glibc 2.15 or later |
+| `novacomd-<version>-linux-arm64` | 64-bit ARM Linux (64-bit Raspberry Pi OS and others) with glibc 2.17 or later |
+| `novacomd-<version>-linux-armhf` | 32-bit ARMv7 Linux with glibc 2.15 or later (Raspberry Pi 2 and later on a 32-bit OS) |
+| `novacomd-<version>-macos-x86_64` | Intel Macs, macOS 10.13 or later |
+| `novacomd-<version>-macos-arm64` | Apple Silicon Macs, macOS 11 or later |
 
-Get the libusb-0.1 API:
+libusb is built in, so a binary needs nothing beyond the operating system. Install one where your Palm SDK looks for
+it, usually `/opt/nova/bin`:
 
-| Platform | Command | What it installs |
+> sudo install -m 0755 novacomd-&lt;version&gt;-linux-x86_64 /opt/nova/bin/novacomd
+
+The macOS binaries are not notarized: if macOS refuses to start one you downloaded, clear its quarantine flag with
+`xattr -d com.apple.quarantine novacomd-<version>-macos-<arch>`. A Raspberry Pi 1 or Zero (ARMv6) builds from source.
+
+## Building from source
+
+You need a C compiler (GCC or Clang), **GNU make**, and the **libusb-0.1 API** (`<usb.h>`, `-lusb`).
+
+Build tools:
+
+* **macOS:** the Xcode Command Line Tools (`xcode-select --install`).
+* **Linux:** `build-essential` on Debian, Ubuntu and Raspberry Pi OS, `gcc` and `make` on Fedora, `base-devel` on Arch
+  and Void.
+
+The libusb-0.1 API:
+
+| Platform | Command | Provides |
 | --- | --- | --- |
-| macOS (Homebrew, Intel or Apple Silicon) | `brew install libusb-compat` | libusb-compat 0.1.9 (and libusb 1.0) |
-| Debian / Ubuntu | `sudo apt install libusb-dev` | libusb 0.1.12 |
-| Raspberry Pi OS (armhf or arm64) | `sudo apt install libusb-dev` | libusb 0.1.12 |
+| macOS (Homebrew) | `brew install libusb-compat` | libusb-compat 0.1.9 |
+| Debian / Ubuntu / Raspberry Pi OS | `sudo apt install libusb-dev` | libusb 0.1.12 |
 | Fedora | `sudo dnf install libusb-compat-0.1-devel` | libusb-compat 0.1.9 |
 | Arch | `sudo pacman -S libusb-compat` | libusb-compat 0.1.9 |
 | Void | `doas xbps-install -S libusb-compat-devel` | libusb-compat 0.1.8 |
 
-Debian, Ubuntu and Raspberry Pi OS package the original libusb 0.1.12 as `libusb-dev` rather than libusb-compat; it
-provides the same `<usb.h>` API, and novacomd builds against either. `libusb-1.0-0-dev` is libusb 1.0, a different API
-that novacomd does not use. Checked 2026-11-11 by building with `install-novacomd.sh` on Debian 13, Ubuntu 24.04,
-Fedora 42 (gcc 15, C23), Arch (gcc 16, C23) and Void, against each distribution's own package indexes for the rest.
+libusb-compat and the original libusb 0.1.12 provide the same API, and novacomd builds against either. (`libusb-1.0-0-dev`
+is libusb 1.0, a different API that novacomd does not use.)
 
-## Building
-
-Run the build script from the source directory. It uses `gcc` (or `cc`) at the compiler's own default C standard; GCC 15's C23 builds as older ones do:
+Build from the source directory with the script. It uses `gcc` (or `cc`; set `CC` to choose, e.g. `CC=clang`) at the
+compiler's default C standard:
 
 > ./install-novacomd.sh
 
-To force a specific compiler, set `CC`:
+The daemon lands at `build-novacomd-host/novacomd`. On macOS the build finds Homebrew's libusb-compat under `/usr/local`
+or `/opt/homebrew` by itself.
 
-> CC=clang ./install-novacomd.sh
+## Installing from source
 
-The built daemon lands at `build-novacomd-host/novacomd`.
-
-## Installing
-
-**Linux** — re-run the script with privilege escalation. It still builds as your normal user, then installs to `/usr/local/bin` (override with `INSTALL_DIR`):
+**Linux and Raspberry Pi**: run the script with privilege escalation. It still builds as your normal user, then installs
+to `/usr/local/bin` (set `INSTALL_DIR` for another place):
 
 > sudo ./install-novacomd.sh
 
 `doas ./install-novacomd.sh` works too.
 
-**Raspberry Pi** — the same as Linux: the build has no architecture flags, so it builds natively on the Pi (armhf or arm64):
-
-> sudo ./install-novacomd.sh
-
-**macOS** — build *without* privilege escalation (running the script as root is refused), then copy the binary into your Palm SDK `bin`, usually `/opt/nova/bin`. The build finds Homebrew's libusb-compat by itself, under `/usr/local` on Intel and `/opt/homebrew` on Apple Silicon:
+**macOS**: build *without* privilege escalation (the script refuses to build as root), then copy the binary into your
+Palm SDK's `bin`, usually `/opt/nova/bin`:
 
 > ./install-novacomd.sh
 >
@@ -70,52 +94,19 @@ The built daemon lands at `build-novacomd-host/novacomd`.
 
 ![In Action](https://i.imgur.com/GUqOYEp.png)
 
-## Devices
+## Credits
 
-* **HP/Palm webOS devices** (Pre, Pixi, Veer, TouchPad and the others HP listed), on webOS 1-3 and webOS CE, over USB
-  as always.
-* **LuneOS** (webOS-ports): a TouchPad on LuneOS presents Palm's USB IDs and is found as before. A LuneOS device that
-  adds novacom to its own USB gadget under another vendor's IDs is found by the novacom interface itself (vendor class,
-  subclass 0x47, protocol 0x11) and listed as `unknown-linux`.
-* **Over TCP**: a device or emulator that serves novacom over TCP is reached with `-c <host>:<port>`; that transport no
-  longer stalls on Linux in this fork.
-* **Lunacy** (webOSArchive's legacy webOS apps on Android): novacomd looks through the adb server you run
-  (`127.0.0.1:5037`, or `ADB_SERVER_SOCKET` / `ANDROID_ADB_SERVER_PORT`) for Android devices whose Lunacy answers, and
-  lists each as `adb lunacy` beside the USB devices, so `novacom` and `novaterm` reach it like any other webOS device
-  (the palm-* tools recognise Lunacy from webos-sdk-redux 0.4 on). It never starts an adb server. Every few seconds it asks the adb server for its devices; start novacomd
-  with `-A` (`--no-adb`) to turn the search off, for instance when you use adb for other phones and no Lunacy.
-
-## Changes from HP's release
-
-* libusb-compat-0.1 instead of HP's own USB handlers (Jonathan Dieter, 2012), and its 2025 compatibility update.
-* Builds on Raspberry Pi (armhf, 2019) and on macOS, Intel and Apple Silicon (incidentist; Homebrew's libusb-compat found wherever Homebrew lives).
-* Builds with GCC 15, whose default is C23: `bool` comes from `<stdbool.h>` instead of HP's `typedef int bool`, so every C standard from gnu89 to gnu23 builds, and older GCC as before.
-* LuneOS devices found by the novacom interface when their USB IDs are not in HP's list.
-* A device's SYN packet can no longer make novacomd write outside its receive buffer (an empty data field wrote at index
-  0xffffffff; the bounds no longer wrap on 32-bit hosts). After Travis Geiselbrecht's travisg/novacomd 733d5ca.
-* Every USB packet written is no longer logged to syslog (Maksym Sditanov's Gentoo patch, also in nixpkgs).
-* macOS drops a replugged device's stale link at once, as Linux does (after jwmaag/novacomd 9d94645).
-* From [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux)'s novacomd (webOSArchive: codepoet80, achunt2143), Unix parts only:
-  * Lunacy devices reached through adb (codepoet80), with the nduid a device reports checked as hex before it is listed;
-  * the token storage path no longer writes its terminating NUL one byte past its buffer, and holds a full `PATH_MAX`;
-  * novacom over TCP no longer stalls on Linux (a 4096-byte receive low-water mark against a 48-byte handshake), and reads whole packets;
-  * no spurious "old GCC" warning under Clang.
-
-Thanks to [incidentist](https://github.com/incidentist/novacomd) for the macOS build support, to Jonathan Dieter for the
-libusb-compat port, to jessicarod7 for the GCC 15 instructions, to the webos-sdk-redux maintainers, Travis Geiselbrecht,
-Maksym Sditanov and jwmaag for the fixes above.
+novacomd is HP's, released as open source in 2012. This fork carries work by Jonathan Dieter (the libusb-compat port),
+[incidentist](https://github.com/incidentist/novacomd) (macOS), jessicarod7 (GCC 15),
+[webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) by webOSArchive (codepoet80: the Lunacy relay;
+achunt2143), Travis Geiselbrecht, Maksym Sditanov and jwmaag.
 
 ## Copyright
 
-Unless otherwise specified, all content, including all source code files 
-and documentation files in this repository are:
- Copyright (c) 2008-2012 Hewlett-Packard Development Company, L.P.
-
-Unless otherwise specified, all content, including all source code files
-and documentation files in this repository are:
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this content except in compliance with the License.
-You may obtain a copy of the License at
+Unless otherwise specified, all content in this repository, including all source code and documentation files, is
+Copyright (c) 2008-2012 Hewlett-Packard Development Company, L.P., and licensed under the Apache License, Version 2.0
+(the "License"); you may not use this content except in compliance with the License. You may obtain a copy of the
+License at
 
 http://www.apache.org/licenses/LICENSE-2.0
 
@@ -124,5 +115,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
-

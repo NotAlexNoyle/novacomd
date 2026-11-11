@@ -31,6 +31,7 @@
 #include <sched.h>
 #include <unistd.h>
 #include <assert.h>
+#include <limits.h>	/* PTHREAD_STACK_MIN */
 
 #include <novacom.h>
 #include <debug.h>
@@ -58,7 +59,14 @@ int platform_create_thread(platform_thread_t *_thread, thread_routine routine, v
 
 	pthread_attr_init(&attr);
 
-	rc = pthread_attr_setstacksize(&attr, STACK_SIZE);
+	/* never below the platform's minimum: glibc on 64-bit ARM requires 128 KiB (its 64 KiB pages), and the old
+	 * fixed 64 KiB failed there with EINVAL, so novacomd aborted on its first thread on arm64 Linux */
+	size_t stack_size = STACK_SIZE;
+#ifdef PTHREAD_STACK_MIN
+	if (stack_size < (size_t)PTHREAD_STACK_MIN)
+		stack_size = (size_t)PTHREAD_STACK_MIN;
+#endif
+	rc = pthread_attr_setstacksize(&attr, stack_size);
 	platform_assert(rc == 0);
 
 	rc = pthread_create(&thread, &attr, routine, arg);

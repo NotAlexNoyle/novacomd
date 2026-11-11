@@ -1,0 +1,122 @@
+# macOS release binaries, built on GitHub's macOS runners (Apple hardware, where Apple's SDK may be used) for Intel
+# and Apple Silicon. Runs when a tag reaches this repository (Gitea's push mirror brings it) or by hand.
+#
+# libusb and libusb-compat are built from their release tarballs (checked against pinned SHA-256s) as static
+# libraries for an older macOS than the runner's, and linked in, so a binary needs only macOS itself. The job fails
+# if a binary links anything outside /usr/lib and /System.
+#
+# With the repository secret GITEA_TOKEN, each binary and its .sha256 are attached to the Gitea release of the same
+# tag; without it they are left as workflow artifacts. The token belongs to a Gitea bot account that is a collaborator
+# with write access on this repository alone (a personal token could write every repository its owner can), and has
+# the repository write scope only.
+#
+# Actions are off on the mirrors by policy. They are switched on for this repository only while a release's macOS
+# binaries build, and off again once they are attached; with Actions off this file does nothing.
+#
+# git.trueog.net is the source of truth and GitHub its mirror: this file lives in the Gitea repository and runs on
+# GitHub, the only side with macOS runners (a Gitea Actions instance reading .github/workflows skips the job).
+name: macOS release binaries
+
+on:
+  push:
+    tags: ['[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build (for example 1.2.1)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.server_url == 'https://github.com'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: x86_64
+            min_macos: '10.13'
+          - runner: macos-15
+            arch: arm64
+            min_macos: '11.0'
+    runs-on: ${{ matrix.runner }}
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.min_macos }}
+      LIBUSB_VERSION: '1.0.30'
+      LIBUSB_SHA256: fea36f34f9156400209595e300840767ab1a385ede1dc7ee893015aea9c6dbaf
+      COMPAT_VERSION: '0.1.9'
+      COMPAT_SHA256: 179d934676ad3bd172a5a37cf5c6351b8e9d7816feb3029252e79b30a518a3be
+      GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+      GITEA_API: https://git.trueog.net/api/v1/repos/NotAlexNoyle/novacomd
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: libusb and libusb-compat, static
+        run: |
+          set -eu
+          command -v pkg-config >/dev/null || brew install pkgconf
+          prefix="$RUNNER_TEMP/usb"; src="$RUNNER_TEMP/usb-src"; mkdir -p "$prefix" "$src"; cd "$src"
+          curl -fsSLO "https://github.com/libusb/libusb/releases/download/v$LIBUSB_VERSION/libusb-$LIBUSB_VERSION.tar.bz2"
+          curl -fsSLO "https://github.com/libusb/libusb-compat-0.1/releases/download/v$COMPAT_VERSION/libusb-compat-$COMPAT_VERSION.tar.bz2"
+          echo "$LIBUSB_SHA256  libusb-$LIBUSB_VERSION.tar.bz2" | shasum -a 256 -c -
+          echo "$COMPAT_SHA256  libusb-compat-$COMPAT_VERSION.tar.bz2" | shasum -a 256 -c -
+          tar xjf "libusb-$LIBUSB_VERSION.tar.bz2"
+          (cd "libusb-$LIBUSB_VERSION" && ./configure -q --prefix="$prefix" --disable-shared --enable-static && make -s -j3 install)
+          tar xjf "libusb-compat-$COMPAT_VERSION.tar.bz2"
+          (cd "libusb-compat-$COMPAT_VERSION" && PKG_CONFIG_PATH="$prefix/lib/pkgconfig" ./configure -q --prefix="$prefix" --disable-shared --enable-static && make -s -j3 install)
+          ls -l "$prefix/lib/libusb.a" "$prefix/lib/libusb-1.0.a"
+          echo "USB_PREFIX=$prefix" >> "$GITHUB_ENV"
+
+      - name: novacomd
+        run: |
+          set -eu
+          # the archives by path, so no libusb dylib on the runner can be picked instead; the frameworks are libusb's own
+          libs="$USB_PREFIX/lib/libusb.a $USB_PREFIX/lib/libusb-1.0.a -lobjc -framework IOKit -framework CoreFoundation -framework Security -lpthread"
+          BUILDVERSION="$TAG" make host CFLAGS="-I$USB_PREFIX/include" HOSTLDLIBS="$libs"
+          out="novacomd-$TAG-macos-${{ matrix.arch }}"
+          strip -o "$out" build-novacomd-host/novacomd
+          file "$out"
+          otool -L "$out"
+          otool -l "$out" | grep -A4 LC_BUILD_VERSION | grep -E 'minos|sdk'
+          if otool -L "$out" | tail -n +2 | grep -v -E '^[[:space:]]+/(usr/lib|System/Library)/'; then
+            echo "::error::$out links a library outside macOS"; exit 1
+          fi
+          ./"$out" -V 2>&1 | head -1
+          # as a daemon: it must serve its device list (empty here: no device, no adb)
+          sudo ./"$out" -A > daemon.log 2>&1 &
+          sleep 5
+          nc -w 3 127.0.0.1 6968 < /dev/null && echo "device list served"
+          sudo pkill -f "./$out" || true
+          shasum -a 256 "$out" > "$out.sha256"
+          echo "OUT=$out" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: ${{ env.OUT }}
+          path: |
+            ${{ env.OUT }}
+            ${{ env.OUT }}.sha256
+
+      - name: Attach to the Gitea release
+        if: env.GITEA_TOKEN != ''
+        run: |
+          set -eu
+          auth="Authorization: token $GITEA_TOKEN"
+          id=""
+          for i in $(seq 1 30); do   # the release may be made a little after its tag arrives
+            id=$(curl -fsS -H "$auth" "$GITEA_API/releases/tags/$TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' 2>/dev/null) && break
+            sleep 20
+          done
+          [ -n "$id" ] || { echo "::error::no Gitea release for $TAG"; exit 1; }
+          have=$(curl -fsS -H "$auth" "$GITEA_API/releases/$id/assets" | python3 -c 'import json,sys; print("\n".join(a["name"] for a in json.load(sys.stdin)))')
+          for f in "$OUT" "$OUT.sha256"; do
+            if printf '%s\n' "$have" | grep -qx "$f"; then echo "$f already attached"; continue; fi
+            curl -fsS -H "$auth" -F "attachment=@$f" "$GITEA_API/releases/$id/assets?name=$f" > /dev/null
+            echo "attached $f"
+          done
