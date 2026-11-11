@@ -83,7 +83,8 @@ jobs:
           strip -o "$out" build-novacomd-host/novacomd
           file "$out"
           otool -L "$out"
-          otool -l "$out" | grep -A4 LC_BUILD_VERSION | grep -E 'minos|sdk'
+          # the minimum macOS: LC_BUILD_VERSION, or LC_VERSION_MIN_MACOSX for a target before 10.14 (informational)
+          otool -l "$out" | grep -E -A4 'LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX' | grep -E 'cmd|minos|version|sdk' || true
           if otool -L "$out" | tail -n +2 | grep -v -E '^[[:space:]]+/(usr/lib|System/Library)/'; then
             echo "::error::$out links a library outside macOS"; exit 1
           fi
@@ -108,15 +109,16 @@ jobs:
         run: |
           set -eu
           auth="Authorization: token $GITEA_TOKEN"
+          ua='User-Agent: novacomd-release-upload/1.0'   # Cloudflare answers curl's own User-Agent with a challenge (403)
           id=""
           for i in $(seq 1 30); do   # the release may be made a little after its tag arrives
-            id=$(curl -fsS -H "$auth" "$GITEA_API/releases/tags/$TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' 2>/dev/null) && break
+            id=$(curl -fsS -H "$ua" -H "$auth" "$GITEA_API/releases/tags/$TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' 2>/dev/null) && break
             sleep 20
           done
           [ -n "$id" ] || { echo "::error::no Gitea release for $TAG"; exit 1; }
-          have=$(curl -fsS -H "$auth" "$GITEA_API/releases/$id/assets" | python3 -c 'import json,sys; print("\n".join(a["name"] for a in json.load(sys.stdin)))')
+          have=$(curl -fsS -H "$ua" -H "$auth" "$GITEA_API/releases/$id/assets" | python3 -c 'import json,sys; print("\n".join(a["name"] for a in json.load(sys.stdin)))')
           for f in "$OUT" "$OUT.sha256"; do
             if printf '%s\n' "$have" | grep -qx "$f"; then echo "$f already attached"; continue; fi
-            curl -fsS -H "$auth" -F "attachment=@$f" "$GITEA_API/releases/$id/assets?name=$f" > /dev/null
+            curl -fsS -H "$ua" -H "$auth" -F "attachment=@$f" "$GITEA_API/releases/$id/assets?name=$f" > /dev/null
             echo "attached $f"
           done
