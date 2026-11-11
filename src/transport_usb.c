@@ -568,9 +568,13 @@ int novacom_usbll_process_packet(novacom_usbll_handle_t usbll_handle, const char
 								usbll_handle->heartbeat_interval = 250;
 								usbll_handle->timeout = 1000;
 							}
-							/* recover data */
-							if( (syn_len >= (sizeof(struct usbll_syn_header) + syn_header->data_length))
-									&& (syn_len >= (syn_header->data_length + syn_header->data_offset)) ) {
+							/* recover data: bounds that cannot wrap (32-bit fields, and size_t is 32 bits on armhf), and no
+							 * empty field, whose terminator would land at data_length-1 = 0xffffffff (travisg/novacomd 733d5ca) */
+							if( (syn_header->data_length > 0)
+									&& (syn_len >= sizeof(struct usbll_syn_header))
+									&& (syn_header->data_length <= syn_len - sizeof(struct usbll_syn_header))
+									&& (syn_header->data_offset <= syn_len)
+									&& (syn_header->data_length <= syn_len - syn_header->data_offset) ) {
 								syn_data = (char *)syn_header + syn_header->data_offset;
 								syn_data[syn_header->data_length-1] = 0;	/*explicitly add null string termination, even if it is expected */
 							} else if(syn_len > offsetof(struct usbll_syn_header, data_offset)){
@@ -578,10 +582,9 @@ int novacom_usbll_process_packet(novacom_usbll_handle_t usbll_handle, const char
 								log_printf(LOG_LLTRACE, "invalid data definition within syn packet\n");
 							}
 #if HOST
-#if defined(__linux__)
-							/* notify transport layer about new device, so recovery tokens are disposed */
+							/* notify transport layer about new device, so recovery tokens are disposed (every host: macOS
+							 * builds usb-linux.c too; jwmaag/novacomd 9d94645 widened the old __linux__ guard) */
 							(void)novacom_usb_transport_deviceonline(usbll_handle->remote_nduid);
-#endif
 #endif
 							/* go online */
 							usbll_handle->device_handle = novacom_go_online(usbll_handle->remote_nduid, "usb", usbll_handle->devtype, syn_data);

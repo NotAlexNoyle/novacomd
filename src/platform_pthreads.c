@@ -387,8 +387,8 @@ int platform_socket_getlasterrno()
 #define __SCHED_GCC_VERSION  40300
 #define __COMPILER_GCC_VERSION  (__GNUC__*10000 + __GNUC_MINOR__*100)
 
-#if __COMPILER_GCC_VERSION < __SCHED_GCC_VERSION
-#pragma warning gcc version is lower than __SCHED_GCC_VERSION
+#if defined(__GNUC__) && !defined(__clang__) && __COMPILER_GCC_VERSION < __SCHED_GCC_VERSION
+#warning GCC version is lower than required version 4.3.0
 #endif 
 
 void device_process_setaffinity()

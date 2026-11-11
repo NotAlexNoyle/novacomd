@@ -55,9 +55,10 @@ typedef struct platform_event {
 
 typedef pthread_t platform_thread_t;
 
-typedef int bool;
-#define true 1
-#define false 0
+/* bool, true and false: the compiler's own. Under C23 (gcc 15's default) they are keywords and <stdbool.h> adds
+ * nothing; before it the header defines them. HP's "typedef int bool" is an error in C23. No bool is sent over USB
+ * or TCP or written to disk, so _Bool's single byte changes no format. */
+#include <stdbool.h>
 
 typedef struct platform_time {
 	struct timeval time;

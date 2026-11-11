@@ -77,7 +77,7 @@ static int tokenstorage_path(char *path, size_t len)
  */
 int tokenstorage_store(const char *file, void *buf, size_t len)
 {
-	char path[128];
+	char path[PATH_MAX];
 	size_t  rc=0;
 	FILE *fd = NULL;
 
@@ -112,14 +112,14 @@ int tokenstorage_store(const char *file, void *buf, size_t len)
 int tokenstorage_remove(const char *file)
 {
 	int rc;
-	char path[128];
+	char path[PATH_MAX];
 	/* check storage path */
 	rc = tokenstorage_path(path, sizeof(path));
 	if (-1 == rc) {
 		return rc;
 	}
 	/* token file */
-	strncat(path, file, sizeof(path) - strlen(path));
+	strncat(path, file, sizeof(path) - strlen(path) - 1);
 	/* remove it */
 	rc = remove(path);
 
@@ -133,7 +133,7 @@ int tokenstorage_remove(const char *file)
  */
 int tokenstorage_read(const char *file, void *buf, size_t len)
 {
-	char path[128];
+	char path[PATH_MAX];
 	size_t rc;
 	FILE *fd;
 
@@ -142,7 +142,7 @@ int tokenstorage_read(const char *file, void *buf, size_t len)
 		return -1;
 	}
 	/* token file */
-	strncat(path, file, sizeof(path) - strlen(path));
+	strncat(path, file, sizeof(path) - strlen(path) - 1);
 	LTRACEF("path %s\n", path);
 
 	/* read */

@@ -163,6 +163,35 @@ static int novacom_usb_find_endpoints(usb_dev_handle *handle, int eps[2], int *i
 	return -1;
 }
 
+/*
+ * novacom_usb_has_interface
+ * whether a device offers the novacom interface (vendor class, subclass 0x47, protocol 0x11) in any configuration,
+ * read from the descriptors libusb already holds, without opening it. A device whose vendor/product pair is not in
+ * usbid_list is still a novacom device if it carries the interface: LuneOS adds novacom as a function to a phone's
+ * own composite gadget, under that phone's IDs.
+ */
+static bool novacom_usb_has_interface(struct usb_device *dev)
+{
+	int c, i, a;
+
+	if (!dev->config)
+		return false;
+	for (c = 0; c < dev->descriptor.bNumConfigurations; c++) {
+		struct usb_config_descriptor *config = &dev->config[c];
+		for (i = 0; i < config->bNumInterfaces; i++) {
+			struct usb_interface *interface = &config->interface[i];
+			for (a = 0; a < interface->num_altsetting; a++) {
+				struct usb_interface_descriptor *alt = &interface->altsetting[a];
+				if (alt->bInterfaceClass == USB_CLASS_VENDOR_SPEC &&
+					alt->bInterfaceSubClass == 0x47 && alt->bInterfaceProtocol == 0x11 &&
+					alt->bNumEndpoints >= 2)
+					return true;
+			}
+		}
+	}
+	return false;
+}
+
 static novacom_usb_handle_t *novacom_usb_open( void )
 {
 	int rc;
@@ -187,40 +216,48 @@ static novacom_usb_handle_t *novacom_usb_open( void )
 					dev->devnum, dev->filename, 
 					dev->descriptor.idVendor, dev->descriptor.idProduct);
 #endif
-			/* try to match against our list of vendor/products */
+			/* try to match against our list of vendor/products, then by the novacom interface itself */
+			const char *devtype = NULL;
 			uint i;
 			for (i=0; usbid_list[i].name; i++) {
 				if ((dev->descriptor.idVendor == usbid_list[i].vendor) && (dev->descriptor.idProduct == usbid_list[i].product)) {
-					usb_dev_handle *handle = usb_open(dev);
-					if (!handle) continue;
-
-#if USB_SCAN_TRACE
-					log_printf(LOG_SPEW, "opened usb handle: devnum %d\n", dev->devnum);
-#endif
-
-					int eps[2];
-					int iface = -1;
-					rc = novacom_usb_find_endpoints(handle, eps, &iface);
-					if (rc != 0) {
-						usb_close(handle);
-						continue;
-					}
-
-					LTRACEF("got endpoints: %x, %x\n", eps[0], eps[1]);
-					novacom_usb_handle_t *usb_handle = platform_calloc(sizeof(novacom_usb_handle_t));
-					if(!usb_handle) {
-						return NULL;
-					}
-					usb_handle->handle = handle;
-					usb_handle->rxep = eps[0];
-					usb_handle->txep = eps[1];
-					usb_handle->devtype = usbid_list[i].name;
-					usb_handle->busnum = atoi(dev->bus->dirname);
-					usb_handle->devnum = dev->devnum;
-					usb_handle->iface = iface;
-					return usb_handle;
+					devtype = usbid_list[i].name;
+					break;
 				}
 			}
+			if (!devtype && novacom_usb_has_interface(dev))
+				devtype = "unknown-linux";	/* as HP's "unknown-bootie": a novacom device whose IDs are not in the list */
+			if (!devtype)
+				continue;
+
+			usb_dev_handle *handle = usb_open(dev);
+			if (!handle) continue;
+
+#if USB_SCAN_TRACE
+			log_printf(LOG_SPEW, "opened usb handle: devnum %d\n", dev->devnum);
+#endif
+
+			int eps[2];
+			int iface = -1;
+			rc = novacom_usb_find_endpoints(handle, eps, &iface);
+			if (rc != 0) {
+				usb_close(handle);
+				continue;
+			}
+
+			LTRACEF("got endpoints: %x, %x\n", eps[0], eps[1]);
+			novacom_usb_handle_t *usb_handle = platform_calloc(sizeof(novacom_usb_handle_t));
+			if(!usb_handle) {
+				return NULL;
+			}
+			usb_handle->handle = handle;
+			usb_handle->rxep = eps[0];
+			usb_handle->txep = eps[1];
+			usb_handle->devtype = devtype;
+			usb_handle->busnum = atoi(dev->bus->dirname);
+			usb_handle->devnum = dev->devnum;
+			usb_handle->iface = iface;
+			return usb_handle;
 		}
 	}
 
@@ -344,7 +381,7 @@ static void *novacom_usb_tx_thread(void *arg)
 					count = 0;
 				}
 				if (rc >=0) {
-					TRACEF/*LOG_PRINTF*/("usbll(%08x) wrote tx packet len=%d\n", novacom_usbll_getuid(handle->usbll_handle), rc);
+					log_printf(LOG_SPEW, "usbll(%08x) wrote tx packet len=%d\n", novacom_usbll_getuid(handle->usbll_handle), rc);
 				}
 
 #if FAULTY_TX

@@ -62,7 +62,18 @@ DEVICELD := arm-none-linux-gnueabi-ld
 endif
 
 
-ifeq ($(UNAME), $(filter $(UNAME), Linux Darwin))
+ifeq ($(UNAME), Darwin)
+# macOS: libusb-compat from Homebrew, wherever Homebrew lives (/usr/local on Intel, /opt/homebrew on Apple
+# Silicon, which the compiler does not search by itself). The USB code is the Linux one, through libusb.
+HOMEBREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /usr/local)
+LIBUSB_PREFIX := $(shell brew --prefix libusb-compat 2>/dev/null || echo $(HOMEBREW_PREFIX)/opt/libusb-compat)
+HOSTCFLAGS += -I$(LIBUSB_PREFIX)/include
+LDFLAGS += -L$(LIBUSB_PREFIX)/lib -Wl,-rpath,@executable_path -Wl,-rpath,$(LIBUSB_PREFIX)/lib
+HOSTLDLIBS += -lpthread -lusb
+HOSTPLATFORM := pthreads
+HOSTOS := linux
+else ifeq ($(UNAME), Linux)
+# Linux on any architecture (x86, armhf and arm64 Raspberry Pi OS alike): no architecture flags here
 LDFLAGS += -Wl,-rpath,. # add the local path to the program's search path
 HOSTLDLIBS += -lpthread -lusb
 HOSTPLATFORM := pthreads
@@ -101,7 +112,8 @@ HOSTOBJS := \
 	src/host/usb-$(HOSTOS).o \
 	src/host/tokenstorage.o \
 	src/host/commands_service.o \
-	src/host/recovery.o
+	src/host/recovery.o \
+	src/host/adb_relay.o
 
 # do some work based on the host platform
 ifeq ($(HOSTPLATFORM), pthreads)

@@ -142,8 +142,10 @@ void *inet_rx_loop(void *arg)
 	platform_assert(t_ctl);
 
 	/* prepare sockets */
-	opt = IP_MAX_PACKET_SIZE;
-	setsockopt(socket, SOL_SOCKET, SO_RCVLOWAT, (const char *)&opt, sizeof(opt));
+	/* NOTE: do NOT set SO_RCVLOWAT=IP_MAX_PACKET_SIZE here. The handshake syn
+	 * is 48 bytes and keepalive headers are 12 bytes, so a 4096-byte low-water
+	 * mark leaves recv() blocked ~indefinitely on Linux, which honors RCVLOWAT.
+	 * The rx loop already handles short reads via explicit length checks. */
 	opt = 1;
 	setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, (char*)&opt, sizeof(opt));
 
@@ -154,7 +156,7 @@ void *inet_rx_loop(void *arg)
 
 	/* receive data from opposite side */
 	memset(&t_syn, 0, sizeof(t_syn));
-	readlen = recv(socket, (char *)&t_syn, sizeof(t_syn), 0);
+	readlen = recv(socket, (char *)&t_syn, sizeof(t_syn), MSG_WAITALL);
 
 	if( (readlen != sizeof(t_syn)) || (strncmp(t_syn.magic, NDUID_MAGIC, sizeof(NDUID_MAGIC)) != 0) ) {
 		TRACEL(LOG_ERROR, "invalid connection packet, read(%d/%d)\n", readlen, sizeof(t_syn));
@@ -180,7 +182,7 @@ void *inet_rx_loop(void *arg)
 	/* main loop */
 	while (!novacom_shutdown) {
 		/* read packet header */
-		readlen = recv(socket, (char *)&t_hdr, sizeof(t_hdr), 0);
+		readlen = recv(socket, (char *)&t_hdr, sizeof(t_hdr), MSG_WAITALL);
 		if(    (readlen != sizeof(t_hdr))
 			|| (strncmp(t_hdr.magic, IP_MAGIC, sizeof(IP_MAGIC)) != 0)
 			|| (t_hdr.packetlen > IP_MAX_PACKET_SIZE) ) {
@@ -193,7 +195,7 @@ void *inet_rx_loop(void *arg)
 
 		/* check for 0 data packets */
 		if(t_hdr.packetlen) {
-			readlen = recv(socket, buf, t_hdr.packetlen, 0);
+			readlen = recv(socket, buf, t_hdr.packetlen, MSG_WAITALL);
 			if (readlen != t_hdr.packetlen) {
 				TRACEF("invalid data length (%d/%d)\n", readlen, t_hdr.packetlen);
 				break;

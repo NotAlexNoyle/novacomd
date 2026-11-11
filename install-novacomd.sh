@@ -7,7 +7,7 @@
 #
 # Environment overrides:
 #   NOVACOMD_SRC  source directory (default: this script's directory)
-#   CC            C compiler (default: gcc/cc + -std=gnu17 when supported; whitespace-split, no quoted args)
+#   CC            C compiler (default: gcc, else cc; whitespace-split, no quoted args)
 #   INSTALL_DIR   install location (default: /usr/local/bin)
 #   JOBS          parallel make jobs (default: CPU count)
 #
@@ -46,28 +46,31 @@ if (( EUID == 0 )); then
         die "refusing to build as root -- run as a normal user; privilege escalation is only used to install."
     fi
 fi
-as_builder() { "${builder_prefix[@]}" "$@"; }
+as_builder() { ${builder_prefix[@]+"${builder_prefix[@]}"} "$@"; }   # this form: macOS bash 3.2 calls an empty "${a[@]}" unbound under set -u
 
 # --- preflight: build tools ---
 command -v make >/dev/null 2>&1 || die "'make' not found -- install your build tools (build-essential / base-devel)."
 
 # --- compiler selection ---
-# Default the compiler when CC is unset, and add -std=gnu17 only if accepted (C23-default compilers need it).
+# Default the compiler when CC is unset. Each compiler builds at its own default C standard, C23 (gcc 15) included.
 if [ -z "${CC:-}" ]; then
     if command -v gcc >/dev/null 2>&1; then CC=gcc; else CC=cc; fi
-    if printf 'int main(void){return 0;}\n' | as_builder $CC -std=gnu17 -fsyntax-only -xc - >/dev/null 2>&1; then
-        CC="$CC -std=gnu17"
-    fi
 fi
 
-# Split CC ("gcc -std=gnu17") into an argv array, then confirm a compiler is set and exists.
+# Split CC (e.g. "gcc -std=gnu11") into an argv array, then confirm a compiler is set and exists.
 read -r -a cc_argv <<<"$CC"
 [ "${#cc_argv[@]}" -gt 0 ] || die "CC is empty -- set it to a C compiler, e.g. CC=gcc."
 command -v "${cc_argv[0]}" >/dev/null 2>&1 || die "C compiler not found: ${cc_argv[0]}"
 
 # --- preflight: libusb-compat header ---
 # The host transport needs libusb-compat-0.1 (<usb.h>); probe for it up front for a clear message.
-if ! printf '#include <usb.h>\nint main(void){return 0;}\n' | as_builder "${cc_argv[@]}" -fsyntax-only -xc - >/dev/null 2>&1; then
+# On macOS it is looked for under Homebrew's prefix, as the makefile does (Apple Silicon's /opt/homebrew is not searched).
+probe_flags=()
+if [ "$(uname -s)" = Darwin ] && command -v brew >/dev/null 2>&1; then
+    libusb_prefix="$(brew --prefix libusb-compat 2>/dev/null || printf '%s/opt/libusb-compat' "$(brew --prefix)")"
+    probe_flags=(-I"$libusb_prefix/include")
+fi
+if ! printf '#include <usb.h>\nint main(void){return 0;}\n' | as_builder "${cc_argv[@]}" ${probe_flags[@]+"${probe_flags[@]}"} -fsyntax-only -xc - >/dev/null 2>&1; then
     die "missing libusb-compat-0.1 (<usb.h>). Install it, e.g.:
        Debian/Ubuntu:  sudo apt install libusb-dev
        Fedora:         sudo dnf install libusb-compat-0.1-devel
